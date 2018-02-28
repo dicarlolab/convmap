@@ -11,7 +11,8 @@ np.random.seed(123)
 
 class SeparableMap(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
-               ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', init_rfs=None):
+               ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', init_rfs=None,
+               lr_decay_steps=200, log_num_steps=100):
     self._ld = ld  # reg factor for depth conv
     self._ls = ls  # reg factor for spatial conv
     self._tol = tol
@@ -21,6 +22,8 @@ class SeparableMap(object):
     self._max_epochs = max_epochs
     self._map_type = map_type
     self._init_rfs = init_rfs
+    self._lr_decay_steps = lr_decay_steps
+    self._log_num_steps = log_num_steps
 
     tf.reset_default_graph()
 
@@ -114,7 +117,7 @@ class SeparableMap(object):
           self.total_loss = self.l2_error + self.reg_loss
         self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         self.train_op = self._opt.minimize(self.total_loss, var_list=self.tvars,
-                                          global_step=tf.contrib.framework.get_or_create_global_step())
+                                          global_step=tf.train.get_or_create_global_step())
 
   def fit(self, X, Y):
     with self._graph.as_default():
@@ -140,9 +143,9 @@ class SeparableMap(object):
                        self._lr_ph: self._lr}
           _, loss_value, reg_loss_value = self.sess.run([self.train_op, self.l2_error, self.reg_loss],
                                                         feed_dict=feed_dict)
-        if e % 100 == 0:
+        if e % self._log_num_steps == 0:
           print('Epoch: %d, Err Loss: %.2f, Reg Loss: %.2f' % (e + 1, loss_value, reg_loss_value))
-        if e % 200 == 0 and e != 0:
+        if e % self._lr_decay_steps == 0 and e != 0:
           self._lr /= 10.
         if loss_value < self._tol:
           print('Converged.')
@@ -157,11 +160,10 @@ class SeparableMap(object):
       return np.concatenate(preds, axis=0)
 
   def save_weights(self, save_path):
-
     print('Opening file to write to...')
     with h5py.File(save_path, 'w') as h5file:
       h5file.create_dataset('s_w', data=np.squeeze(self.sess.run(self.s_vars)))
-      h5file.create_dataset('s_d', data=np.squeeze(self.sess.run(self.d_vars)))
+      h5file.create_dataset('d_w', data=np.squeeze(self.sess.run(self.d_vars)))
       h5file.create_dataset('bias', data=np.squeeze(self.sess.run(self.biases)))
     print('Finished saving.')
 
