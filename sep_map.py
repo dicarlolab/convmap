@@ -7,7 +7,7 @@ np.random.seed(123)
 # TF implementation of RF limited Regression
 
 class SeparableMap(object):
-  def __init__(self, graph=None, rf_init=None, num_neurons=65, batch_size=50, init_lr=0.01,
+  def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', init_rfs=None):
     self.ld = ld  # reg factor for depth conv
     self.ls = ls  # reg factor for spatial conv
@@ -26,7 +26,7 @@ class SeparableMap(object):
     else:
       self.graph = graph
 
-  def iterate_minibatches(self, inputs, targets=None, batchsize=128, shuffle=False):
+  def _iterate_minibatches(self, inputs, targets=None, batchsize=128, shuffle=False):
     input_len = inputs.shape[0]
 
     if shuffle:
@@ -42,7 +42,7 @@ class SeparableMap(object):
       else:
         yield inputs[excerpt], targets[excerpt]
 
-  def make_separable_map(self):
+  def _make_separable_map(self):
     with tf.variable_scope('mapping'):
       if self.map_type == 'separable':
         input_shape = self.input_ph.shape
@@ -70,7 +70,7 @@ class SeparableMap(object):
         tmp = tf.layers.flatten(self.input_ph)
         self._predictions = tf.layers.dense(tmp, self.num_neurons)
 
-  def make_loss(self):
+  def _make_loss(self):
     with tf.variable_scope('loss'):
       self.l2_error = tf.norm(self._predictions - self.target_ph,
                               ord=2)  # tf.reduce_sum(tf.pow(self._predictions-self.target_ph, 2))/(2*self.batch_size) #
@@ -113,8 +113,8 @@ class SeparableMap(object):
     self.input_ph = tf.placeholder(dtype=tf.float32, shape=[None] + list(X.shape[1:]))
     self.target_ph = tf.placeholder(dtype=tf.float32, shape=[None, Y.shape[-1]])
     # Build the model graph
-    self.model = self.make_separable_map()
-    self.make_loss()
+    self._make_separable_map()
+    self._make_loss()
 
     # initialize graph
     print('Initializing...')
@@ -122,7 +122,7 @@ class SeparableMap(object):
     init_op = tf.variables_initializer(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
     self.sess.run(init_op)
     for e in range(self.max_epochs):
-      for counter, batch in enumerate(self.iterate_minibatches(X, Y, batchsize=self.batch_size, shuffle=True)):
+      for counter, batch in enumerate(self._iterate_minibatches(X, Y, batchsize=self.batch_size, shuffle=True)):
         feed_dict = {self.input_ph: batch[0],
                      self.target_ph: batch[1],
                      self._lr_ph: self.lr}
@@ -138,7 +138,7 @@ class SeparableMap(object):
 
   def predict(self, X):
     preds = []
-    for batch in self.iterate_minibatches(X, batchsize=self.batch_size, shuffle=False):
+    for batch in self._iterate_minibatches(X, batchsize=self.batch_size, shuffle=False):
       feed_dict = {self.input_ph: batch}
       preds.append(np.squeeze(self.sess.run([self._predictions], feed_dict=feed_dict)))
     return np.concatenate(preds, axis=0)
