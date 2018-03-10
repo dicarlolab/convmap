@@ -11,7 +11,8 @@ np.random.seed(123)
 
 class SeparableMap(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
-               ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None):
+               ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
+               log_rate=100, decay_rate=200):
     self._ld = ld  # reg factor for depth conv
     self._ls = ls  # reg factor for spatial conv
     self._tol = tol
@@ -22,6 +23,8 @@ class SeparableMap(object):
     self._map_type = map_type
     self._inits = inits
     self._is_initialized = False
+    self._log_rate = log_rate
+    self._decay_rate = decay_rate
 
     tf.reset_default_graph()
 
@@ -146,9 +149,9 @@ class SeparableMap(object):
                        self._lr_ph: self._lr}
           _, loss_value, reg_loss_value = self._sess.run([self.train_op, self.l2_error, self.reg_loss],
                                                         feed_dict=feed_dict)
-        if e % 100 == 0:
+        if e % self._log_rate == 0:
           print('Epoch: %d, Err Loss: %.2f, Reg Loss: %.2f' % (e + 1, loss_value, reg_loss_value))
-        if e % 200 == 0 and e != 0:
+        if e % self._decay_rate == 0 and e != 0:
           self._lr /= 10.
         if loss_value < self._tol:
           print('Converged.')
