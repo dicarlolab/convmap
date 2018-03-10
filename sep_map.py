@@ -177,7 +177,7 @@ class SeparableMap(object):
       else:
         assert X.ndim == 4, 'Input matrix rank should be 4.'
       if self._is_initialized is False:
-        self._init_mapper()
+        self._init_mapper(X)
 
       for e in range(self._max_epochs):
         for counter, batch in enumerate(self._iterate_minibatches(X, Y, batchsize=self._batch_size, shuffle=True)):
@@ -202,7 +202,7 @@ class SeparableMap(object):
     """
     with self._graph.as_default():
       if self._is_initialized is False:
-        self._init_mapper()
+        self._init_mapper(X)
 
       preds = []
       for batch in self._iterate_minibatches(X, batchsize=self._batch_size, shuffle=False):
@@ -223,14 +223,15 @@ class SeparableMap(object):
       h5file.create_dataset('bias', data=np.squeeze(self._sess.run(self._biases)))
     print('Finished saving.')
 
-  def _init_mapper(self):
+  def _init_mapper(self, X):
     """
     Initializes the mapping function graph
+    :param X: input data
     :return:
     """
     with self._graph.as_default():
       self._input_ph = tf.placeholder(dtype=tf.float32, shape=[None] + list(X.shape[1:]))
-      self.target_ph = tf.placeholder(dtype=tf.float32, shape=[None, Y.shape[-1]])
+      self.target_ph = tf.placeholder(dtype=tf.float32, shape=[None, self._num_neurons])
       # Build the model graph
       self._make_separable_map()
       self._make_loss()
