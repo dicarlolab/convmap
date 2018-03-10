@@ -13,6 +13,22 @@ class SeparableMap(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
                log_rate=100, decay_rate=200):
+    """
+    Mapping function class.
+    :param graph: tensorflow graph to build the mapping function with
+    :param num_neurons: number of neurons (response variable) to predict
+    :param batch_size: batch size
+    :param init_lr: initial learning rate
+    :param ls: regularization coefficient for spatial parameters
+    :param ld: regularization coefficient for depth parameters
+    :param tol: tolerance - stops the optimization if reaches below tol
+    :param max_epochs: maximum number of epochs to train
+    :param map_type: type of mapping function ('linreg', 'separable')
+    :param inits: initial values for the mapping function parameters. A dictionary containing
+                  any of the following keys ['s_w', 'd_w', 'bias']
+    :param log_rate: rate of logging the loss values
+    :param decay_rate: rate of decay for learning rate (#epochs)
+    """
     self._ld = ld  # reg factor for depth conv
     self._ls = ls  # reg factor for spatial conv
     self._tol = tol
@@ -38,8 +54,15 @@ class SeparableMap(object):
       self._opt = tf.train.AdamOptimizer(learning_rate=self._lr_ph)
 
   def _iterate_minibatches(self, inputs, targets=None, batchsize=128, shuffle=False):
+    """
+    Iterates over inputs with minibatches
+    :param inputs: input dataset, first dimension should be examples
+    :param targets: [n_examples, n_neurons] response values, first dimension should be examples
+    :param batchsize: batch size
+    :param shuffle: flag indicating whether to shuffle the data while making minibatches
+    :return: minibatch of (X, Y)
+    """
     input_len = inputs.shape[0]
-
     if shuffle:
       indices = np.arange(input_len)
       np.random.shuffle(indices)
@@ -54,6 +77,10 @@ class SeparableMap(object):
         yield inputs[excerpt], targets[excerpt]
 
   def _make_separable_map(self):
+    """
+    Makes the mapping function computational graph
+    :return:
+    """
     with self._graph.as_default():
       with tf.variable_scope('mapping'):
         if self._map_type == 'separable':
@@ -96,6 +123,10 @@ class SeparableMap(object):
           self._predictions = tf.layers.dense(tmp, self._num_neurons)
 
   def _make_loss(self):
+    """
+    Makes the loss computational graph
+    :return:
+    """
     with self._graph.as_default():
       with tf.variable_scope('loss'):
         self.l2_error = tf.norm(self._predictions - self.target_ph,
@@ -134,6 +165,12 @@ class SeparableMap(object):
                                            global_step=tf.train.get_or_create_global_step())
 
   def fit(self, X, Y):
+    """
+    Fits the parameters to the data
+    :param X: Input data, first dimension is examples
+    :param Y: response values (neurons), first dimension is examples
+    :return:
+    """
     with self._graph.as_default():
       if self._map_type == 'linreg':
         assert X.ndim == 2, 'Input matrix rank should be 2.'
@@ -158,6 +195,11 @@ class SeparableMap(object):
           break
 
   def predict(self, X):
+    """
+    Predicts the respnoses to the give input X
+    :param X: Input data, first dimension is examples
+    :return: predictions
+    """
     with self._graph.as_default():
       if self._is_initialized is False:
         self._init_mapper()
@@ -169,6 +211,11 @@ class SeparableMap(object):
       return np.concatenate(preds, axis=0)
 
   def save_weights(self, save_path):
+    """
+    Save weights to an hdf5 file
+    :param save_path: save path
+    :return:
+    """
     print('Opening file to write to...')
     with h5py.File(save_path, 'w') as h5file:
       h5file.create_dataset('s_w', data=np.squeeze(self._sess.run(self._s_vars)))
@@ -177,6 +224,10 @@ class SeparableMap(object):
     print('Finished saving.')
 
   def _init_mapper(self):
+    """
+    Initializes the mapping function graph
+    :return:
+    """
     with self._graph.as_default():
       self._input_ph = tf.placeholder(dtype=tf.float32, shape=[None] + list(X.shape[1:]))
       self.target_ph = tf.placeholder(dtype=tf.float32, shape=[None, Y.shape[-1]])
@@ -192,6 +243,10 @@ class SeparableMap(object):
       self._sess.run(init_op)
 
   def close(self):
+    """
+    Closes occupied resources
+    :return:
+    """
     tf.reset_default_graph()
     self._sess.close()
 
