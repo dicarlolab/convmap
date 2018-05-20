@@ -12,7 +12,7 @@ np.random.seed(123)
 class SeparableMap(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
-               log_rate=100, decay_rate=200):
+               log_rate=100, decay_rate=200, gpu_options=None):
     """
     Mapping function class.
     :param graph: tensorflow graph to build the mapping function with
@@ -41,6 +41,7 @@ class SeparableMap(object):
     self._is_initialized = False
     self._log_rate = log_rate
     self._decay_rate = decay_rate
+    self._gpu_options = gpu_options
 
     tf.reset_default_graph()
 
@@ -155,9 +156,9 @@ class SeparableMap(object):
                                        dtype=tf.float32)
           laplace_loss = tf.reduce_sum(
             [tf.norm(tf.nn.conv2d(t, laplace_filter, [1, 1, 1, 1], 'SAME')) for t in self._s_vars])
-          l2_loss = tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self._s_vars])
+          l2_loss = tf.reduce_mean([tf.reduce_mean(tf.pow(t, 2)) for t in self._s_vars])
           self.reg_loss = self._ls * (l2_loss + laplace_loss) + \
-                          self._ld * tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self._d_vars])
+                          self._ld * tf.reduce_mean([tf.reduce_mean(tf.pow(t, 2)) for t in self._d_vars])
 
           self.total_loss = self.l2_error + self.reg_loss
         self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -240,7 +241,11 @@ class SeparableMap(object):
       # initialize graph
       print('Initializing...')
       init_op = tf.variables_initializer(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
-      self._sess = tf.Session()
+      if self._gpu_options is None:
+        self._sess = tf.Session()
+      else:
+        self._sess = tf.Session(config=tf.ConfigProto(gpu_options=self._gpu_options))
+
       self._sess.run(init_op)
 
   def close(self):
