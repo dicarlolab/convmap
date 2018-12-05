@@ -9,7 +9,7 @@ np.random.seed(123)
 
 # TF implementation of RF limited Regression
 
-class SeparableMap(object):
+class Mapper(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
                log_rate=100, decay_rate=200, gpu_options=None):
@@ -132,12 +132,11 @@ class SeparableMap(object):
       with tf.variable_scope('loss'):
         self.l2_error = tf.norm(self._predictions - self.target_ph,
                                 ord=2)  # tf.reduce_sum(tf.pow(self._predictions-self.target_ph, 2))/(2*self.batch_size) #
-
         # For L1-Regression
         if self._map_type == 'linreg':
           self.reg_loss = tf.reduce_sum(
             [tf.reduce_sum(tf.abs(t)) for t in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)])
-          self.total_loss = self.l2_error + self.reg_loss
+          self.total_loss = self.l2_error + self._ld * self.reg_loss
 
         elif self._map_type == 'separable':
           # For separable mapping
@@ -156,9 +155,9 @@ class SeparableMap(object):
                                        dtype=tf.float32)
           laplace_loss = tf.reduce_sum(
             [tf.norm(tf.nn.conv2d(t, laplace_filter, [1, 1, 1, 1], 'SAME')) for t in self._s_vars])
-          l2_loss = tf.reduce_mean([tf.reduce_mean(tf.pow(t, 2)) for t in self._s_vars])
+          l2_loss = tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self._s_vars])
           self.reg_loss = self._ls * (l2_loss + laplace_loss) + \
-                          self._ld * tf.reduce_mean([tf.reduce_mean(tf.pow(t, 2)) for t in self._d_vars])
+                          self._ld * tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self._d_vars])
 
           self.total_loss = self.l2_error + self.reg_loss
         self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
