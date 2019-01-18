@@ -111,10 +111,13 @@ class Mapper(object):
               out = s_w * self._input_ph
 
               tf.add_to_collection('d_w', d_w)
+              out = tf.reduce_sum(out, axis=[1, 2], keepdims=True)
               out = tf.nn.conv2d(out, d_w, [1, 1, 1, 1], 'SAME')
 
               tf.add_to_collection('bias', bias)
-              preds.append(tf.reduce_sum(out, axis=[1, 2]) + bias)
+              preds.append(tf.squeeze(out, axis=[1, 2]) + bias)
+              # preds.append(tf.reduce_sum(out, axis=[1, 2]) + bias)
+
           self._predictions = tf.concat(preds, -1)
         elif self._map_type == 'linreg':
           # For L1-Regression
