@@ -43,8 +43,6 @@ class Mapper(object):
     self._decay_rate = decay_rate
     self._gpu_options = gpu_options
 
-    tf.reset_default_graph()
-
     if graph is None:
       self._graph = tf.Graph()
     else:
