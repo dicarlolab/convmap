@@ -5,9 +5,11 @@ import tensorflow as tf
 import h5py
 
 np.random.seed(123)
+npa = np.array
 
 
 # TF implementation of RF limited Regression
+
 
 class Mapper(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
@@ -84,45 +86,50 @@ class Mapper(object):
       with tf.variable_scope('mapping'):
         if self._map_type == 'separable':
           input_shape = self._input_ph.shape
-          preds = []
-          for n in range(self._num_neurons):
-            with tf.variable_scope('N_{}'.format(n)):
-              if self._inits is None:
-                s_w = tf.Variable(initial_value=np.random.randn(1, input_shape[1], input_shape[2], 1), dtype=tf.float32)
-                d_w = tf.Variable(initial_value=np.random.randn(1, 1, input_shape[-1], 1), dtype=tf.float32)
-                bias = tf.Variable(initial_value=np.zeros((1, 1, 1, 1)), dtype=tf.float32)
-              else:
-                if 's_w' in self._inits:
-                  s_w = tf.Variable(initial_value=self._inits['s_w'][n].reshape((1, input_shape[1], input_shape[2], 1)),
-                                    dtype=tf.float32)
-                else:
-                  s_w = tf.Variable(initial_value=np.random.randn(1, input_shape[1], input_shape[2], 1),
-                                    dtype=tf.float32)
-                if 'd_w' in self._inits:
-                  d_w = tf.Variable(initial_value=self._inits['d_w'][n].reshape(1, 1, input_shape[-1], 1), dtype=tf.float32)
-                else:
-                  d_w = tf.Variable(initial_value=np.random.randn(1, 1, input_shape[-1], 1), dtype=tf.float32)
-                if 'bias' in self._inits:
-                  bias = tf.Variable(initial_value=self._inits['bias'][n].reshape(1, 1, 1, 1), dtype=tf.float32)
-                else:
-                  bias = tf.Variable(initial_value=np.zeros((1, 1, 1, 1)), dtype=tf.float32)
+          if self._inits is None:
+            s_w = tf.Variable(initial_value=np.random.randn(1, input_shape[1], input_shape[2], 1, self._num_neurons),
+                              dtype=tf.float32)
+            d_w = tf.Variable(initial_value=np.random.randn(1, input_shape[-1], self._num_neurons), dtype=tf.float32)
+            bias = tf.Variable(initial_value=np.zeros((1, self._num_neurons)), dtype=tf.float32)
+          else:
+            if 's_w' in self._inits:
+              s_w = tf.Variable(
+                initial_value=self._inits['s_w'].reshape((1, input_shape[1], input_shape[2], 1, self._num_neurons)),
+                dtype=tf.float32)
+            else:
+              s_w = tf.Variable(initial_value=np.random.randn(1, input_shape[1], input_shape[2], 1, self._num_neurons),
+                                dtype=tf.float32)
+            if 'd_w' in self._inits:
+              d_w = tf.Variable(initial_value=self._inits['d_w'].reshape(1, input_shape[-1], self._num_neurons),
+                                dtype=tf.float32)
+            else:
+              d_w = tf.Variable(initial_value=np.random.randn(1, input_shape[-1], self._num_neurons),
+                                dtype=tf.float32)
+            if 'bias' in self._inits:
+              bias = tf.Variable(initial_value=self._inits['bias'].reshape(1, self._num_neurons), dtype=tf.float32)
+            else:
+              bias = tf.Variable(initial_value=np.zeros((1, self._num_neurons)), dtype=tf.float32)
 
-              tf.add_to_collection('s_w', s_w)
-              out = s_w * self._input_ph
+          tf.add_to_collection('s_w', s_w)
+          out = s_w * tf.expand_dims(self._input_ph, axis=-1)
 
-              tf.add_to_collection('d_w', d_w)
-              out = tf.reduce_sum(out, axis=[1, 2], keepdims=True)
-              out = tf.nn.conv2d(out, d_w, [1, 1, 1, 1], 'SAME')
+          tf.add_to_collection('d_w', d_w)
+          out = tf.reduce_sum(out, axis=[1, 2])
+          out = out * d_w
 
-              tf.add_to_collection('bias', bias)
-              preds.append(tf.squeeze(out, axis=[1, 2]) + bias)
-              # preds.append(tf.reduce_sum(out, axis=[1, 2]) + bias)
+          tf.add_to_collection('bias', bias)
+          preds = tf.reduce_sum(out, axis=1) + bias
+          # preds.append(tf.reduce_sum(out, axis=[1, 2]) + bias)
 
           self._predictions = tf.concat(preds, -1)
         elif self._map_type == 'linreg':
           # For L1-Regression
           tmp = tf.layers.flatten(self._input_ph)
           self._predictions = tf.layers.dense(tmp, self._num_neurons)
+
+  @staticmethod
+  def _l2_loss(weights):
+    return tf.reduce_mean([tf.reduce_sum(w ** 2) for w in weights])
 
   def _make_loss(self):
     """
@@ -141,24 +148,19 @@ class Mapper(object):
 
         elif self._map_type == 'separable':
           # For separable mapping
-          self._s_vars = tf.get_collection('s_w')
-          self._d_vars = tf.get_collection('d_w')
-          self._biases = tf.get_collection('bias')
-
-          # L1 reg
-          # self.reg_loss = self.ls * tf.reduce_sum([tf.reduce_sum(tf.abs(t)) for t in self.s_vars]) + self.ld * tf.reduce_sum([tf.reduce_sum(tf.abs(t)) for t in self.d_vars])
-          # L2 reg
-          # self.reg_loss = self.ls * tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self.s_vars]) + self.ld * tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self.d_vars])
-          #                 self.total_loss = self.l2_error + self.reg_loss
+          self._s_vars = tf.get_collection('s_w')[0]
+          self._d_vars = tf.get_collection('d_w')[0]
+          self._biases = tf.get_collection('bias')[0]
 
           # Laplacian loss
-          laplace_filter = tf.constant(np.array([0, -1, 0, -1, 4, -1, 0, -1, 0]).reshape((3, 3, 1, 1)),
+          laplace_filter = tf.constant(npa([0, -1, 0, -1, 4, -1, 0, -1, 0]).reshape((3, 3, 1, 1)),
                                        dtype=tf.float32)
-          laplace_loss = tf.reduce_sum(
-            [tf.norm(tf.nn.conv2d(t, laplace_filter, [1, 1, 1, 1], 'SAME')) for t in self._s_vars])
-          l2_loss = tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self._s_vars])
-          self.reg_loss = self._ls * (l2_loss + laplace_loss) + \
-                          self._ld * tf.reduce_sum([tf.reduce_sum(tf.pow(t, 2)) for t in self._d_vars])
+          laplace_loss = self._l2_loss([tf.nn.conv2d(tf.squeeze(tf.transpose(self._s_vars, perm=[4, 1, 2, 3, 0]),
+                                                                axis=4),
+                                                    laplace_filter, [1, 1, 1, 1], 'SAME')])
+
+          l2_loss = self._l2_loss([self._s_vars, self._d_vars])
+          self.reg_loss = self._ls * l2_loss + self._ld * laplace_loss
 
           self.total_loss = self.l2_error + self.reg_loss
         self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -255,5 +257,3 @@ class Mapper(object):
     """
     tf.reset_default_graph()
     self._sess.close()
-
-
