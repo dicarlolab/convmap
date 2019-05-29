@@ -275,9 +275,9 @@ class Mapper(object):
     """
     print('Opening file to write to...')
     with h5py.File(save_path, 'w') as h5file:
-      h5file.create_dataset('s_w', data=np.squeeze(self._sess.run(self._s_vars)))
-      h5file.create_dataset('d_w', data=np.squeeze(self._sess.run(self._d_vars)))
-      h5file.create_dataset('bias', data=np.squeeze(self._sess.run(self._biases)))
+      h5file.create_dataset('s_w', data=self._sess.run(self._s_vars))
+      h5file.create_dataset('d_w', data=self._sess.run(self._d_vars))
+      h5file.create_dataset('bias', data=self._sess.run(self._biases))
     print('Finished saving.')
 
   def _init_mapper(self, X):
