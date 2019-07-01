@@ -7,7 +7,6 @@ import h5py
 np.random.seed(123)
 npa = np.array
 
-
 # TF implementation of RF limited Regression
 
 
@@ -44,6 +43,7 @@ class Mapper(object):
     self._log_rate = log_rate
     self._decay_rate = decay_rate
     self._gpu_options = gpu_options
+    assert map_type in ['linreg', 'separable', 'separable_legacy']
 
     if graph is None:
       self._graph = tf.Graph()
@@ -163,10 +163,14 @@ class Mapper(object):
           # For L1-Regression
           tmp = tf.layers.flatten(self._input_ph)
           self._predictions = tf.layers.dense(tmp, self._num_neurons)
+          weights = tf.global_variables()
+          assert weights[1].shape == self._num_neurons
+          tf.add_to_collection('w', weights[0])
+          tf.add_to_collection('bias', weights[1])
 
   @staticmethod
   def _l2_loss(weights):
-    return tf.reduce_mean([tf.reduce_sum(w ** 2) for w in weights])
+    return tf.reduce_sum(weights ** 2) / tf.to_float(weights.shape[0])
 
   def _make_loss(self):
     """
@@ -179,6 +183,8 @@ class Mapper(object):
                                 ord=2)  # tf.reduce_sum(tf.pow(self._predictions-self.target_ph, 2))/(2*self.batch_size) #
         # For L1-Regression
         if self._map_type == 'linreg':
+          self._w = tf.get_collection('w')
+          self._biases = tf.get_collection('bias')
           self.reg_loss = tf.reduce_sum(
             [tf.reduce_sum(tf.abs(t)) for t in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)])
           self.total_loss = self.l2_error + self._ld * self.reg_loss
@@ -209,12 +215,12 @@ class Mapper(object):
           # Laplacian loss
           laplace_filter = tf.constant(npa([0, -1, 0, -1, 4, -1, 0, -1, 0]).reshape((3, 3, 1, 1)),
                                        dtype=tf.float32)
-          laplace_loss = self._l2_loss([tf.nn.conv2d(tf.squeeze(tf.transpose(self._s_vars, perm=[4, 1, 2, 3, 0]),
-                                                                axis=4),
-                                                    laplace_filter, [1, 1, 1, 1], 'SAME')])
+          laplace_loss = self._l2_loss(tf.nn.conv2d(tf.squeeze(tf.transpose(self._s_vars, perm=[4, 1, 2, 3, 0]),
+                                                               axis=4), laplace_filter, [1, 1, 1, 1], 'SAME'))
 
-          l2_loss = self._l2_loss([self._s_vars, self._d_vars])
-          self.reg_loss = self._ls * l2_loss + self._ld * laplace_loss
+          l2_loss = self._l2_loss(tf.transpose(self._s_vars))
+          self.reg_loss = self._ls * (l2_loss + laplace_loss) + \
+                          self._ld * self._l2_loss(tf.transpose(self._d_vars))
 
           self.total_loss = self.l2_error + self.reg_loss
         self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
@@ -275,9 +281,14 @@ class Mapper(object):
     """
     print('Opening file to write to...')
     with h5py.File(save_path, 'w') as h5file:
-      h5file.create_dataset('s_w', data=self._sess.run(self._s_vars))
-      h5file.create_dataset('d_w', data=self._sess.run(self._d_vars))
-      h5file.create_dataset('bias', data=self._sess.run(self._biases))
+      if 'separable' in self._map_type:
+        h5file.create_dataset('s_w', data=self._sess.run(self._s_vars))
+        h5file.create_dataset('d_w', data=self._sess.run(self._d_vars))
+        h5file.create_dataset('bias', data=self._sess.run(self._biases))
+      else:
+        h5file.create_dataset('w', data=self._sess.run(self._w))
+        h5file.create_dataset('bias', data=self._sess.run(self._biases))
+
     print('Finished saving.')
 
   def _init_mapper(self, X):
