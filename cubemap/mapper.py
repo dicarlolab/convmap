@@ -67,7 +67,7 @@ class Mapper(object):
     if shuffle:
       indices = np.arange(input_len)
       np.random.shuffle(indices)
-    for start_idx in range(0, input_len // batchsize + batchsize, batchsize):
+    for start_idx in range(0, input_len // batchsize * batchsize, batchsize):
       if shuffle:
         excerpt = indices[start_idx:start_idx + batchsize]
       else:
@@ -271,9 +271,10 @@ class Mapper(object):
         self._init_mapper(X)
 
       preds = []
-      for batch in self._iterate_minibatches(X, batchsize=self._batch_size, shuffle=False):
+      for batch in self._iterate_minibatches(X, batchsize=1, shuffle=False):
         feed_dict = {self._input_ph: batch}
-        preds.append(np.squeeze(self._sess.run([self._predictions], feed_dict=feed_dict)))
+        preds.append(np.reshape(self._sess.run([self._predictions], feed_dict=feed_dict),
+                                newshape=(1, -1)))
       return np.concatenate(preds, axis=0)
 
   def save_weights(self, save_path):
