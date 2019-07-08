@@ -119,7 +119,6 @@ class Mapper(object):
 
           tf.add_to_collection('bias', bias)
           preds = tf.reduce_sum(out, axis=1) + bias
-          # preds.append(tf.reduce_sum(out, axis=[1, 2]) + bias)
 
           self._predictions = tf.concat(preds, -1)
         elif self._map_type == 'separable_legacy':
@@ -172,6 +171,10 @@ class Mapper(object):
   def _l2_loss(weights):
     return tf.reduce_sum(weights ** 2) / tf.to_float(weights.shape[0])
 
+  @staticmethod
+  def _l1_loss(weights):
+    return tf.reduce_sum(tf.abs(weights)) / tf.to_float(weights.shape[0])
+
   def _make_loss(self):
     """
     Makes the loss computational graph
@@ -179,8 +182,7 @@ class Mapper(object):
     """
     with self._graph.as_default():
       with tf.variable_scope('loss'):
-        self.l2_error = tf.norm(self._predictions - self.target_ph,
-                                ord=2)  # tf.reduce_sum(tf.pow(self._predictions-self.target_ph, 2))/(2*self.batch_size) #
+        self.l2_error = tf.norm(self._predictions - self.target_ph, ord=2)
         # For L1-Regression
         if self._map_type == 'linreg':
           self._w = tf.get_collection('w')
@@ -218,9 +220,10 @@ class Mapper(object):
           laplace_loss = self._l2_loss(tf.nn.conv2d(tf.squeeze(tf.transpose(self._s_vars, perm=[4, 1, 2, 3, 0]),
                                                                axis=4), laplace_filter, [1, 1, 1, 1], 'SAME'))
 
-          l2_loss = self._l2_loss(tf.transpose(self._s_vars))
-          self.reg_loss = self._ls * (l2_loss + laplace_loss) + \
-                          self._ld * self._l2_loss(tf.transpose(self._d_vars))
+          l2_loss_s = self._l2_loss(tf.transpose(self._s_vars))
+          l2_loss_d = self._l2_loss(tf.transpose(self._d_vars))
+          self.reg_loss = self._ls * laplace_loss + \
+                          self._ld * (l2_loss_s + l2_loss_d)
 
           self.total_loss = self.l2_error + self.reg_loss
         self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
