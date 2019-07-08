@@ -67,7 +67,7 @@ class Mapper(object):
     if shuffle:
       indices = np.arange(input_len)
       np.random.shuffle(indices)
-    for start_idx in range(0, input_len, batchsize):
+    for start_idx in range(0, input_len // batchsize + batchsize, batchsize):
       if shuffle:
         excerpt = indices[start_idx:start_idx + batchsize]
       else:
