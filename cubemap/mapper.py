@@ -252,7 +252,7 @@ class Mapper(object):
                        self._lr_ph: self._lr}
           _, loss_value, reg_loss_value = self._sess.run([self.train_op, self.l2_error, self.reg_loss],
                                                          feed_dict=feed_dict)
-        if e % self._log_rate == 0:
+        if (e % self._log_rate == 0) or (e == self._max_epochs-1):
           print('Epoch: %d, Err Loss: %.2f, Reg Loss: %.2f' % (e + 1, loss_value, reg_loss_value))
         if e % self._decay_rate == 0 and e != 0:
           self._lr /= 10.
