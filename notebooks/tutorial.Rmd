@@ -1,0 +1,98 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.1'
+      jupytext_version: 1.1.7
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python pycharm={'is_executing': False}}
+import os
+import numpy as np
+import h5py
+import dldata.metrics.utils as utils
+import dldata.stimulus_sets.hvm as hvm
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import scale
+from scipy.stats import pearsonr
+from cubemap.mapper import Mapper
+import tensorflow as tf
+
+np.random.seed([0])
+os.environ['CUDA_VISIBLE_DEVICES'] = '4'
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
+
+dataset_hvm = hvm.HvMWithDiscfade()
+meta_hvm = dataset_hvm.meta
+neurons = dataset_hvm.neuronal_features
+v4_data = neurons[:, dataset_hvm.V4_NEURONS]
+```
+
+<!-- #region {"pycharm": {}} -->
+# Separable (Mask-Mix) Mapping
+<!-- #endregion -->
+
+```{python pycharm={}}
+kf = KFold(n_splits=2)
+
+
+with h5py.File('/braintree/data2/active/users/bashivan/model_features/alexnet_retina299_alexpreprocess.h5') as features_h5_hvm:
+    X = np.array(features_h5_hvm['mdl_conv3'])
+
+Y = scale(v4_data)
+    
+num_images = X.shape[0]
+num_neurons = Y.shape[-1]
+
+# mapping accuracy is very sensitive to the choice of regularization parameters ls and ld
+# ls = 1.  # regularization parameter for the spatial mask weights
+ld = 0.1  # regularization parameter for the mixing weights
+ 
+print('Mapping with ls={}, ld={}'.format(ls, ld))
+
+preds = np.zeros_like(Y)
+for i, (train_ind, test_ind) in enumerate(kf.split(X)):
+    mapper = Mapper(graph=None, max_epochs=30, tol=0.1, 
+                    init_lr=0.1, batch_size=10, ls=ls, ld=ld, num_neurons=num_neurons,
+                    map_type='separable', inits=None, decay_rate=10, log_rate=10)
+
+    mapper.fit(X[train_ind], Y[train_ind])
+    preds[test_ind] = mapper.predict(X[test_ind])
+scores = np.array([pearsonr(preds[:, i], Y[:, i])[0] for i in range(preds.shape[-1])])
+print('Scores: ', np.median(scores))
+
+```
+
+```{python pycharm={}}
+# PCR Comparison
+from sklearn import linear_model
+from sklearn.decomposition import PCA
+
+Y = scale(v4_data)
+
+features = X.reshape(X.shape[0], -1)
+pca = PCA(n_components=1000, whiten=False)
+model_pcs = pca.fit_transform(features)
+
+preds = np.zeros_like(Y)
+for i, (train_ind, test_ind) in enumerate(kf.split(model_pcs)):
+    print('working on fold {0}/{1}'.format(i+1, 2))
+    clf = linear_model.Ridge(alpha=10)
+    clf.fit(model_pcs[train_ind], Y[train_ind])
+
+    # print the test performance 
+    preds[test_ind] = clf.predict(model_pcs[test_ind])
+scores = np.array([pearsonr(preds[:, i], Y[:, i])[0] for i in range(preds.shape[-1])])
+print('Scores: ', np.median(scores))
+
+```
+
+```{python pycharm={}, jupyter={'outputs_hidden': True}}
+
+```
