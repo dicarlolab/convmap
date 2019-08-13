@@ -13,7 +13,7 @@ npa = np.array
 
 class Decoder(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
-               ls=0.05, ld=0.1, tol=1e-2, max_epochs=10,, inits=None,
+               ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, inits=None,
                log_rate=100, decay_rate=200, gpu_options=None):
     """
     Mapping function class.
