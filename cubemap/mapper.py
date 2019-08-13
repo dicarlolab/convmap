@@ -3,14 +3,16 @@ from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 import h5py
+from .basemapper import BaseMapper
 
 np.random.seed(123)
 npa = np.array
 
+
 # TF implementation of RF limited Regression
 
 
-class Mapper(object):
+class Mapper(BaseMapper):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
                log_rate=100, decay_rate=200, gpu_options=None):
@@ -30,52 +32,10 @@ class Mapper(object):
     :param log_rate: rate of logging the loss values
     :param decay_rate: rate of decay for learning rate (#epochs)
     """
-    self._ld = ld  # reg factor for depth conv
-    self._ls = ls  # reg factor for spatial conv
-    self._tol = tol
-    self._batch_size = batch_size
-    self._num_neurons = num_neurons
-    self._lr = init_lr
-    self._max_epochs = max_epochs
-    self._map_type = map_type
-    self._inits = inits
-    self._is_initialized = False
-    self._log_rate = log_rate
-    self._decay_rate = decay_rate
-    self._gpu_options = gpu_options
-    assert map_type in ['linreg', 'separable', 'separable_legacy']
 
-    if graph is None:
-      self._graph = tf.Graph()
-    else:
-      self._graph = graph
-
-    with self._graph.as_default():
-      self._lr_ph = tf.placeholder(dtype=tf.float32)
-      self._opt = tf.train.AdamOptimizer(learning_rate=self._lr_ph)
-
-  def _iterate_minibatches(self, inputs, targets=None, batchsize=128, shuffle=False):
-    """
-    Iterates over inputs with minibatches
-    :param inputs: input dataset, first dimension should be examples
-    :param targets: [n_examples, n_neurons] response values, first dimension should be examples
-    :param batchsize: batch size
-    :param shuffle: flag indicating whether to shuffle the data while making minibatches
-    :return: minibatch of (X, Y)
-    """
-    input_len = inputs.shape[0]
-    if shuffle:
-      indices = np.arange(input_len)
-      np.random.shuffle(indices)
-    for start_idx in range(0, input_len // batchsize * batchsize, batchsize):
-      if shuffle:
-        excerpt = indices[start_idx:start_idx + batchsize]
-      else:
-        excerpt = slice(start_idx, start_idx + batchsize)
-      if targets is None:
-        yield inputs[excerpt]
-      else:
-        yield inputs[excerpt], targets[excerpt]
+    super(Mapper, self).__init__(graph=graph, num_neurons=num_neurons, batch_size=batch_size, init_lr=init_lr,
+                                 ls=ls, ld=ld, tol=tol, max_epochs=max_epochs, map_type=map_type, inits=inits,
+                                 log_rate=log_rate, decay_rate=decay_rate, gpu_options=gpu_options)
 
   def _make_separable_map(self):
     """
@@ -167,14 +127,6 @@ class Mapper(object):
           tf.add_to_collection('w', weights[0])
           tf.add_to_collection('bias', weights[1])
 
-  @staticmethod
-  def _l2_loss(weights):
-    return tf.reduce_sum(weights ** 2) / tf.to_float(weights.shape[0])
-
-  @staticmethod
-  def _l1_loss(weights):
-    return tf.reduce_sum(tf.abs(weights)) / tf.to_float(weights.shape[0])
-
   def _make_loss(self):
     """
     Makes the loss computational graph
@@ -252,7 +204,7 @@ class Mapper(object):
                        self._lr_ph: self._lr}
           _, loss_value, reg_loss_value = self._sess.run([self.train_op, self.l2_error, self.reg_loss],
                                                          feed_dict=feed_dict)
-        if (e % self._log_rate == 0) or (e == self._max_epochs-1):
+        if (e % self._log_rate == 0) or (e == self._max_epochs - 1):
           print('Epoch: %d, Err Loss: %.2f, Reg Loss: %.2f' % (e + 1, loss_value, reg_loss_value))
         if e % self._decay_rate == 0 and e != 0:
           self._lr /= 10.
@@ -318,11 +270,3 @@ class Mapper(object):
         self._sess = tf.Session(config=tf.ConfigProto(gpu_options=self._gpu_options))
 
       self._sess.run(init_op)
-
-  def close(self):
-    """
-    Closes occupied resources
-    :return:
-    """
-    tf.reset_default_graph()
-    self._sess.close()
