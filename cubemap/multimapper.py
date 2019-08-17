@@ -43,6 +43,10 @@ class MultiMapper(BaseMapper):
     :return:
     """
     # use the class Mapper to map to multiple layers
+    # - make sure all the feature map sizes are similar
+    # - define W_s per layer features
+    # - multiply by the spatial mask variable (similar to Mapper)
+    # - multiply by the depthwise mixing vector (similar to Mapper but the depth is the sum of all filters in all layers)
 
   def _make_loss(self):
     """
