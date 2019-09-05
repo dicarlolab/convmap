@@ -12,7 +12,7 @@ npa = np.array
 # TF implementation of RF limited Regression
 
 
-cclass MultiMapper(BaseMapper):
+class MultiMapper(BaseMapper):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
                log_rate=100, decay_rate=200, gpu_options=None, num_layers = 5, layer_sizes = [96, 256, 384, 384, 256]):
