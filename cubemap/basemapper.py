@@ -8,7 +8,7 @@ import h5py
 class BaseMapper(object):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
-               log_rate=100, decay_rate=200, gpu_options=None):
+               log_rate=100, decay_rate=200, gpu_options=None, multimode=False):
     """
     Mapping function class.
     :param graph: tensorflow graph to build the mapping function with
@@ -38,6 +38,7 @@ class BaseMapper(object):
     self._log_rate = log_rate
     self._decay_rate = decay_rate
     self._gpu_options = gpu_options
+    self.multimode = multimode
     assert map_type in ['linreg', 'separable', 'separable_legacy']
 
     if graph is None:
@@ -45,9 +46,10 @@ class BaseMapper(object):
     else:
       self._graph = graph
 
-    with self._graph.as_default():
-      self._lr_ph = tf.placeholder(dtype=tf.float32)
-      self._opt = tf.train.AdamOptimizer(learning_rate=self._lr_ph)
+    if not self.multimode:
+      with self._graph.as_default():
+        self._lr_ph = tf.placeholder(dtype=tf.float32)
+        self._opt = tf.train.AdamOptimizer(learning_rate=self._lr_ph)
 
   def _iterate_minibatches(self, inputs, targets=None, batchsize=128, shuffle=False):
     """

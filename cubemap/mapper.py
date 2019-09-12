@@ -15,7 +15,7 @@ npa = np.array
 class Mapper(BaseMapper):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
-               log_rate=100, decay_rate=200, gpu_options=None):
+               log_rate=100, decay_rate=200, gpu_options=None, multimode=False):
     """
     Mapping function class.
     :param graph: tensorflow graph to build the mapping function with
@@ -35,15 +35,16 @@ class Mapper(BaseMapper):
 
     super(Mapper, self).__init__(graph=graph, num_neurons=num_neurons, batch_size=batch_size, init_lr=init_lr,
                                  ls=ls, ld=ld, tol=tol, max_epochs=max_epochs, map_type=map_type, inits=inits,
-                                 log_rate=log_rate, decay_rate=decay_rate, gpu_options=gpu_options)
+                                 log_rate=log_rate, decay_rate=decay_rate, gpu_options=gpu_options, multimode=multimode)
 
-  def _make_separable_map(self):
+  def _make_separable_map(self, scope='mapping'):
     """
     Makes the mapping function computational graph
     :return:
     """
+    self._scope = scope
     with self._graph.as_default():
-      with tf.variable_scope('mapping'):
+      with tf.variable_scope(scope):
         if self._map_type == 'separable':
           input_shape = self._input_ph.shape
           if self._inits is None:
@@ -54,30 +55,30 @@ class Mapper(BaseMapper):
           else:
             if 's_w' in self._inits:
               s_w = tf.Variable(
-                initial_value=self._inits['s_w'].reshape((1, input_shape[1], input_shape[2], 1, self._num_neurons)),
+                initial_value=self._inits[f'{scope}/s_w'].reshape((1, input_shape[1], input_shape[2], 1, self._num_neurons)),
                 dtype=tf.float32)
             else:
               s_w = tf.Variable(initial_value=np.random.randn(1, input_shape[1], input_shape[2], 1, self._num_neurons),
                                 dtype=tf.float32)
             if 'd_w' in self._inits:
-              d_w = tf.Variable(initial_value=self._inits['d_w'].reshape(1, input_shape[-1], self._num_neurons),
+              d_w = tf.Variable(initial_value=self._inits[f'{scope}/d_w'].reshape(1, input_shape[-1], self._num_neurons),
                                 dtype=tf.float32)
             else:
               d_w = tf.Variable(initial_value=np.random.randn(1, input_shape[-1], self._num_neurons),
                                 dtype=tf.float32)
             if 'bias' in self._inits:
-              bias = tf.Variable(initial_value=self._inits['bias'].reshape(1, self._num_neurons), dtype=tf.float32)
+              bias = tf.Variable(initial_value=self._inits[f'{scope}/bias'].reshape(1, self._num_neurons), dtype=tf.float32)
             else:
               bias = tf.Variable(initial_value=np.zeros((1, self._num_neurons)), dtype=tf.float32)
 
-          tf.add_to_collection('s_w', s_w)
+          tf.add_to_collection(f'{scope}/s_w', s_w)
           out = s_w * tf.expand_dims(self._input_ph, axis=-1)
 
-          tf.add_to_collection('d_w', d_w)
+          tf.add_to_collection(f'{scope}/d_w', d_w)
           out = tf.reduce_sum(out, axis=[1, 2])
           out = out * d_w
 
-          tf.add_to_collection('bias', bias)
+          tf.add_to_collection(f'{scope}/bias', bias)
           preds = tf.reduce_sum(out, axis=1) + bias
 
           self._predictions = tf.concat(preds, -1)
@@ -107,14 +108,14 @@ class Mapper(BaseMapper):
                 else:
                   bias = tf.Variable(initial_value=np.zeros((1, 1, 1, 1)), dtype=tf.float32)
 
-              tf.add_to_collection('s_w', s_w)
+              tf.add_to_collection(f'{scope}/s_w', s_w)
               out = s_w * self._input_ph
 
-              tf.add_to_collection('d_w', d_w)
+              tf.add_to_collection(f'{scope}/d_w', d_w)
               out = tf.reduce_sum(out, axis=[1, 2], keepdims=True)
               out = tf.nn.conv2d(out, d_w, [1, 1, 1, 1], 'SAME')
 
-              tf.add_to_collection('bias', bias)
+              tf.add_to_collection(f'{scope}/bias', bias)
               preds.append(tf.squeeze(out, axis=[1, 2]) + bias)
 
           self._predictions = tf.concat(preds, -1)
@@ -124,8 +125,8 @@ class Mapper(BaseMapper):
           self._predictions = tf.layers.dense(tmp, self._num_neurons)
           weights = tf.global_variables()
           assert weights[1].shape == self._num_neurons
-          tf.add_to_collection('w', weights[0])
-          tf.add_to_collection('bias', weights[1])
+          tf.add_to_collection(f'{scope}/w', weights[0])
+          tf.add_to_collection(f'{scope}/bias', weights[1])
 
   def _make_loss(self):
     """
@@ -145,9 +146,9 @@ class Mapper(BaseMapper):
 
         elif self._map_type == 'separable_legacy':
           # For separable mapping
-          self._s_vars = tf.get_collection('s_w')
-          self._d_vars = tf.get_collection('d_w')
-          self._biases = tf.get_collection('bias')
+          self._s_vars = tf.get_collection(f'{self._scope}/s_w')
+          self._d_vars = tf.get_collection(f'{self._scope}/d_w')
+          self._biases = tf.get_collection(f'{self._scope}/bias')
 
           # Laplacian loss
           laplace_filter = tf.constant(np.array([0, -1, 0, -1, 4, -1, 0, -1, 0]).reshape((3, 3, 1, 1)),
@@ -162,9 +163,9 @@ class Mapper(BaseMapper):
 
         elif self._map_type == 'separable':
           # For separable mapping
-          self._s_vars = tf.get_collection('s_w')[0]
-          self._d_vars = tf.get_collection('d_w')[0]
-          self._biases = tf.get_collection('bias')[0]
+          self._s_vars = tf.get_collection(f'{self._scope}/s_w')[0]
+          self._d_vars = tf.get_collection(f'{self._scope}/d_w')[0]
+          self._biases = tf.get_collection(f'{self._scope}/bias')[0]
 
           # Laplacian loss
           laplace_filter = tf.constant(npa([0, -1, 0, -1, 4, -1, 0, -1, 0]).reshape((3, 3, 1, 1)),
@@ -177,10 +178,11 @@ class Mapper(BaseMapper):
           self.reg_loss = self._ls * laplace_loss + \
                           self._ld * (l2_loss_s + l2_loss_d)
 
+        if not self.multimode:
           self.total_loss = self.l2_error + self.reg_loss
-        self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        self.train_op = self._opt.minimize(self.total_loss, var_list=self.tvars,
-                                           global_step=tf.train.get_or_create_global_step())
+          self.tvars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+          self.train_op = self._opt.minimize(self.total_loss, var_list=self.tvars,
+                                             global_step=tf.train.get_or_create_global_step())
 
   def fit(self, X, Y):
     """
@@ -246,6 +248,15 @@ class Mapper(BaseMapper):
         h5file.create_dataset('bias', data=self._sess.run(self._biases))
 
     print('Finished saving.')
+
+  def get_weights(self):
+    if 'separable' in self._map_type:
+      return {'s_w': self._sess.run(self._s_vars),
+              'd_w': self._sess.run(self._d_vars),
+              'bias': self._sess.run(self._biases)}
+    else:
+      return {'w': self._sess.run(self._w),
+              'bias': self._sess.run(self._biases)}
 
   def _init_mapper(self, X):
     """
