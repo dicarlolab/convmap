@@ -53,20 +53,21 @@ class Mapper(BaseMapper):
             d_w = tf.Variable(initial_value=np.random.randn(1, input_shape[-1], self._num_neurons), dtype=tf.float32)
             bias = tf.Variable(initial_value=np.zeros((1, self._num_neurons)), dtype=tf.float32)
           else:
-            if 's_w' in self._inits:
+
+            if f'{scope}/s_w' in self._inits:
               s_w = tf.Variable(
                 initial_value=self._inits[f'{scope}/s_w'].reshape((1, input_shape[1], input_shape[2], 1, self._num_neurons)),
                 dtype=tf.float32)
             else:
               s_w = tf.Variable(initial_value=np.random.randn(1, input_shape[1], input_shape[2], 1, self._num_neurons),
                                 dtype=tf.float32)
-            if 'd_w' in self._inits:
+            if f'{scope}/d_w' in self._inits:
               d_w = tf.Variable(initial_value=self._inits[f'{scope}/d_w'].reshape(1, input_shape[-1], self._num_neurons),
                                 dtype=tf.float32)
             else:
               d_w = tf.Variable(initial_value=np.random.randn(1, input_shape[-1], self._num_neurons),
                                 dtype=tf.float32)
-            if 'bias' in self._inits:
+            if f'{scope}/bias' in self._inits:
               bias = tf.Variable(initial_value=self._inits[f'{scope}/bias'].reshape(1, self._num_neurons), dtype=tf.float32)
             else:
               bias = tf.Variable(initial_value=np.zeros((1, self._num_neurons)), dtype=tf.float32)
