@@ -15,7 +15,7 @@ npa = np.array
 class Mapper(BaseMapper):
   def __init__(self, graph=None, num_neurons=65, batch_size=50, init_lr=0.01,
                ls=0.05, ld=0.1, tol=1e-2, max_epochs=10, map_type='linreg', inits=None,
-               log_rate=100, decay_rate=200, gpu_options=None, multimode=False):
+               log_rate=100, decay_rate=200, gpu_options=None, multimode=False, use_l1loss=False):
     """
     Mapping function class.
     :param graph: tensorflow graph to build the mapping function with
@@ -36,6 +36,7 @@ class Mapper(BaseMapper):
     super(Mapper, self).__init__(graph=graph, num_neurons=num_neurons, batch_size=batch_size, init_lr=init_lr,
                                  ls=ls, ld=ld, tol=tol, max_epochs=max_epochs, map_type=map_type, inits=inits,
                                  log_rate=log_rate, decay_rate=decay_rate, gpu_options=gpu_options, multimode=multimode)
+    self.use_l1loss = use_l1loss
 
   def _make_separable_map(self, scope='mapping'):
     """
@@ -175,9 +176,12 @@ class Mapper(BaseMapper):
                                                                axis=4), laplace_filter, [1, 1, 1, 1], 'SAME'))
 
           l2_loss_s = self._l2_loss(tf.transpose(self._s_vars))
-          l2_loss_d = self._l2_loss(tf.transpose(self._d_vars))
+          if self.use_l1loss:
+            loss_d = self._l1_loss(tf.transpose(self._d_vars))
+          else:
+            loss_d = self._l2_loss(tf.transpose(self._d_vars))
           self.reg_loss = self._ls * laplace_loss + \
-                          self._ld * (l2_loss_s + l2_loss_d)
+                          self._ld * (l2_loss_s + loss_d)
 
         if not self.multimode:
           self.total_loss = self.l2_error + self.reg_loss
